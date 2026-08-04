@@ -4,10 +4,10 @@ export async function POST(req: Request) {
   const { message, threadId } = await req.json();
 
   const result = await agentGraph.invoke(
-    { messages: [{ role: "user", content: message }] },  // ← SÓ a mensagem nova
-    { configurable: { thread_id: threadId } }            // ← qual conversa
+    { messages: [{ role: "user", content: message }] },  // ← ONLY the new message
+    { configurable: { thread_id: threadId } }             // ← which conversation
   );
 
-  const ultima = result.messages[result.messages.length - 1];
-  return Response.json({ answer: ultima.content });
+  const last = result.messages[result.messages.length - 1];
+  return Response.json({ answer: last.content });
 }

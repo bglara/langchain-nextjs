@@ -15,97 +15,97 @@ import { MemorySaver } from "@langchain/langgraph";
 
 
 /**
- * Parser recursivo descendente: entende SÓ números, + - * / e parênteses.
- * Qualquer outro caractere é rejeitado antes de qualquer processamento.
- * Nada aqui executa código — só percorre a string e faz aritmética.
+ * Recursive-descent parser: understands ONLY numbers, + - * / and parentheses.
+ * Any other character is rejected before any processing happens.
+ * Nothing here executes code — it just walks the string and does arithmetic.
  */
-function avaliarExpressao(entrada: string): number {
-	const texto = entrada.replace(/\s+/g, "");
+function evaluateExpression(input: string): number {
+	const text = input.replace(/\s+/g, "");
 
-	// A primeira linha de defesa: lista de permissão de caracteres.
-	if (!/^[0-9+\-*/().]+$/.test(texto)) {
-		throw new Error("A expressão contém caracteres não permitidos.");
+	// First line of defense: character allow-list.
+	if (!/^[0-9+\-*/().]+$/.test(text)) {
+		throw new Error("The expression contains disallowed characters.");
 	}
 
 	let pos = 0;
 
-	// expressão := termo (('+' | '-') termo)*
-	function expressao(): number {
-		let valor = termo();
+	// expression := term (('+' | '-') term)*
+	function expression(): number {
+		let value = term();
 		while (
-			pos < texto.length &&
-			(texto[pos] === "+" || texto[pos] === "-")
+			pos < text.length &&
+			(text[pos] === "+" || text[pos] === "-")
 		) {
-			const op = texto[pos++];
-			const direita = termo();
-			valor = op === "+" ? valor + direita : valor - direita;
+			const op = text[pos++];
+			const right = term();
+			value = op === "+" ? value + right : value - right;
 		}
-		return valor;
+		return value;
 	}
 
-	// termo := fator (('*' | '/') fator)*    ← multiplicação antes de soma
-	function termo(): number {
-		let valor = fator();
+	// term := factor (('*' | '/') factor)*    ← multiplication before addition
+	function term(): number {
+		let value = factor();
 		while (
-			pos < texto.length &&
-			(texto[pos] === "*" || texto[pos] === "/")
+			pos < text.length &&
+			(text[pos] === "*" || text[pos] === "/")
 		) {
-			const op = texto[pos++];
-			const direita = fator();
-			if (op === "/" && direita === 0)
-				throw new Error("Divisão por zero.");
-			valor = op === "*" ? valor * direita : valor / direita;
+			const op = text[pos++];
+			const right = factor();
+			if (op === "/" && right === 0)
+				throw new Error("Division by zero.");
+			value = op === "*" ? value * right : value / right;
 		}
-		return valor;
+		return value;
 	}
 
-	// fator := número | '(' expressão ')' | '-' fator
-	function fator(): number {
-		if (texto[pos] === "(") {
+	// factor := number | '(' expression ')' | '-' factor
+	function factor(): number {
+		if (text[pos] === "(") {
 			pos++;
-			const valor = expressao();
-			if (texto[pos] !== ")") throw new Error("Parêntese não fechado.");
+			const value = expression();
+			if (text[pos] !== ")") throw new Error("Unclosed parenthesis.");
 			pos++;
-			return valor;
+			return value;
 		}
 
-		if (texto[pos] === "-") {
+		if (text[pos] === "-") {
 			pos++;
-			return -fator();
+			return -factor();
 		}
 
-		const inicio = pos;
-		while (pos < texto.length && /[0-9.]/.test(texto[pos])) pos++;
-		if (inicio === pos) throw new Error("Número esperado.");
-		return parseFloat(texto.slice(inicio, pos));
+		const start = pos;
+		while (pos < text.length && /[0-9.]/.test(text[pos])) pos++;
+		if (start === pos) throw new Error("Expected a number.");
+		return parseFloat(text.slice(start, pos));
 	}
 
-	const resultado = expressao();
-	if (pos !== texto.length) throw new Error("Expressão inválida.");
-	return resultado;
+	const result = expression();
+	if (pos !== text.length) throw new Error("Invalid expression.");
+	return result;
 }
 
 const calculator = tool(
 	async ({ expression }) => {
 		console.log("[TOOL] calculator:", expression);
 		try {
-			return String(avaliarExpressao(expression));
-		} catch (erro) {
-			// Devolvemos o erro como texto em vez de lançar: assim o modelo
-			// vê o que deu errado e pode tentar corrigir a expressão.
-			return `Erro ao calcular: ${(erro as Error).message}`;
+			return String(evaluateExpression(expression));
+		} catch (error) {
+			// Return the error as text instead of throwing: this way the model
+			// sees what went wrong and can try to fix the expression.
+			return `Calculation error: ${(error as Error).message}`;
 		}
 	},
 	{
 		name: "calculator",
 		description:
-			"Avalia uma expressão aritmética simples, tipo '12 * 4 + 1'. " +
-			"Aceita apenas números, + - * / e parênteses.",
+			"Evaluates a simple arithmetic expression, like '12 * 4 + 1'. " +
+			"Accepts only numbers, + - * / and parentheses.",
 
 		schema: z.object({
 			expression: z
 				.string()
-				.describe("A expressão aritmética a ser calculada"),
+				.describe("The arithmetic expression to calculate"),
 		}),
 	},
 );
@@ -120,10 +120,10 @@ const searchNotes = tool(
 	{
 		name: "search_notes",
 		description:
-			"Busca informações nos documentos internos da empresa Nimbus Robotics: " +
-			"políticas de RH, preços de produtos e informações do escritório.",
+			"Searches Nimbus Robotics' internal documents: " +
+			"HR policies, product pricing, and office information.",
 		schema: z.object({
-			query: z.string().describe("O que buscar nos documentos"),
+			query: z.string().describe("What to search for in the documents"),
 		}),
 	},
 );
@@ -132,10 +132,10 @@ const tools = [calculator, searchNotes];
 const llmWithTools = llm.bindTools(tools);
 
 const systemPrompt = new SystemMessage(
-    "Você é um assistente com acesso a ferramentas. " +
-    "Se precisar de um número que não conhece, use search_notes primeiro." +
-    "SEMPRE use a ferramenta calculator para QUALQUER operação aritmética." +
-	"Responda em texto simples. Não use LaTeX nem notação matemática — escreva números normalmente."
+    "You are an assistant with access to tools. " +
+    "If you need a number you don't already know, use search_notes first." +
+    "ALWAYS use the calculator tool for ANY arithmetic operation." +
+	"Respond in plain text. Do not use LaTeX or mathematical notation — write numbers normally."
   );
 
 
