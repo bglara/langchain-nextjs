@@ -1,13 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Message = { role: "user" | "assistant"; content: string };
-type Tab = "chat" | "summarize" | "ask-docs";
+type Tab = "chat" | "summarize" | "ask-docs" | "agent";
 
 const TAB_LABELS: Record<Tab, string> = {
   chat: "Chat",
   summarize: "Summarize",
   "ask-docs": "Ask Your Notes",
+  agent: "Agent",
 };
 
 export default function Home() {
@@ -29,6 +30,22 @@ export default function Home() {
   const [question, setQuestion] = useState("");
   const [docsAnswer, setDocsAnswer] = useState<{ answer: string; sources: string[] } | null>(null);
   const [asking, setAsking] = useState(false);
+
+  // agent (LangGraph) state
+  const [agentMessages, setAgentMessages] = useState<Message[]>([]);
+  const [agentInput, setAgentInput] = useState("");
+  const [agentThinking, setAgentThinking] = useState(false);
+  const [threadId, setThreadId] = useState("");
+
+  // Gerado no cliente (não no SSR) pra não dar mismatch de hidratação.
+  useEffect(() => {
+    setThreadId(crypto.randomUUID());
+  }, []);
+
+  function newThread() {
+    setThreadId(crypto.randomUUID());
+    setAgentMessages([]);
+  }
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -90,6 +107,26 @@ export default function Home() {
     const data = await res.json();
     setDocsAnswer(data);
     setAsking(false);
+  }
+
+  async function sendToAgent(e: React.FormEvent) {
+    e.preventDefault();
+
+    const pergunta = agentInput;
+    setAgentInput("");
+    setAgentMessages((prev) => [...prev, { role: "user", content: pergunta }]);
+    setAgentThinking(true);
+
+    // Manda SÓ a mensagem nova — o histórico vive no checkpointer do servidor.
+    const res = await fetch("/api/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: pergunta, threadId }),
+    });
+    const data = await res.json();
+
+    setAgentMessages((prev) => [...prev, { role: "assistant", content: data.answer }]);
+    setAgentThinking(false);
   }
 
   return (
@@ -215,6 +252,67 @@ export default function Home() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "agent" && (
+          <div className="flex flex-1 flex-col">
+            <div className="flex items-center justify-between gap-3 pb-3">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Thread: <span className="font-mono">{threadId.slice(0, 8) || "..."}</span>
+                {" — a memória vive no servidor, o cliente só manda a mensagem nova."}
+              </p>
+              <button
+                onClick={newThread}
+                className="shrink-0 rounded-full border border-zinc-300 dark:border-zinc-700 px-3 py-1 text-xs font-medium text-black dark:text-white"
+              >
+                Nova thread
+              </button>
+            </div>
+
+            <div className="flex flex-1 flex-col gap-3 overflow-y-auto pb-4">
+              {agentMessages.length === 0 && (
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  Tente: &quot;Meu nome é Bruno e tenho 23 drones.&quot; e depois
+                  &quot;Quanto eu pagaria de Nimbus Cloud Sync por ano?&quot;
+                </p>
+              )}
+
+              {agentMessages.map((m, i) => (
+                <div
+                  key={i}
+                  className={`max-w-[80%] rounded-2xl px-4 py-2 whitespace-pre-wrap ${
+                    m.role === "user"
+                      ? "self-end bg-black text-white dark:bg-white dark:text-black"
+                      : "self-start bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white"
+                  }`}
+                >
+                  {m.content}
+                </div>
+              ))}
+
+              {agentThinking && (
+                <div className="self-start rounded-2xl bg-zinc-200 dark:bg-zinc-800 px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+                  pensando (pode estar usando ferramentas)...
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={sendToAgent} className="flex gap-2 pt-2">
+              <input
+                value={agentInput}
+                onChange={(e) => setAgentInput(e.target.value)}
+                placeholder="Pergunte algo ao agente..."
+                className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-black px-4 py-2 text-black dark:text-white outline-none"
+              />
+              <button
+                type="submit"
+                disabled={agentThinking || !agentInput || !threadId}
+                className="rounded-full bg-black dark:bg-white text-white dark:text-black px-5 py-2 font-medium disabled:opacity-40"
+              >
+                Enviar
+              </button>
+            </form>
           </div>
         )}
       </main>
