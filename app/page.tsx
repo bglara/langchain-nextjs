@@ -6,6 +6,12 @@ type Message = { role: "user" | "assistant"; content: string };
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [summary, setSummary] = useState<{
+    title: string;
+    keyPoints: string[];
+    actionItems: string[];
+  } | null>(null);
+  const [summarizing, setSummarizing] = useState(false);
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -42,6 +48,18 @@ export default function Home() {
     }
   }
 
+  async function summarize() {
+    setSummarizing(true);
+    const res = await fetch("/api/summarize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+    const data = await res.json();
+    setSummary(data);
+    setSummarizing(false);
+  }
+
   return (
     <div className="flex flex-col flex-1 items-center bg-zinc-50 dark:bg-black">
       <main className="flex flex-1 w-full max-w-2xl flex-col py-8 px-4">
@@ -59,6 +77,40 @@ export default function Home() {
             </div>
           ))}
         </div>
+        <div className="flex flex-col gap-3 pb-3">
+  <button
+    onClick={summarize}
+    disabled={messages.length === 0 || summarizing}
+    className="self-start rounded-full border border-zinc-300 dark:border-zinc-700 px-4 py-1.5 text-sm font-medium text-black dark:text-white disabled:opacity-40"
+  >
+    {summarizing ? "Summarizing..." : "Summarize conversation"}
+  </button>
+
+  {summary && (
+    <div className="rounded-2xl border border-zinc-300 dark:border-zinc-700 p-4 text-sm text-black dark:text-white">
+      <h3 className="font-semibold mb-2">{summary.title}</h3>
+
+      <p className="font-medium mt-2">Key points</p>
+      <ul className="list-disc list-inside">
+        {summary.keyPoints.map((k, i) => (
+          <li key={i}>{k}</li>
+        ))}
+      </ul>
+
+      {summary.actionItems.length > 0 && (
+        <>
+          <p className="font-medium mt-2">Action items</p>
+          <ul className="list-disc list-inside">
+            {summary.actionItems.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  )}
+</div>
+
 
         <form onSubmit={sendMessage} className="flex gap-2 pt-2">
           <input
