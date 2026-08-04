@@ -1,10 +1,18 @@
-import { StateGraph, START, END, MessagesAnnotation } from "@langchain/langgraph";
+import {
+	StateGraph,
+	START,
+	END,
+	MessagesAnnotation,
+} from "@langchain/langgraph";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { llm } from "@/lib/llm";
 import { getRetriever } from "@/lib/rag";
 import { SystemMessage } from "@langchain/core/messages";
+import { MemorySaver } from "@langchain/langgraph";
+
+
 
 /**
  * Parser recursivo descendente: entende SÓ números, + - * / e parênteses.
@@ -125,10 +133,11 @@ const llmWithTools = llm.bindTools(tools);
 
 const systemPrompt = new SystemMessage(
     "Você é um assistente com acesso a ferramentas. " +
-    "Se precisar de um número que você ainda não conhece, use search_notes para " +
-    "descobri-lo ANTES de chamar a calculadora. " +
-    "A calculadora aceita apenas números literais — nunca coloque palavras nela."
+    "Se precisar de um número que não conhece, use search_notes primeiro." +
+    "SEMPRE use a ferramenta calculator para QUALQUER operação aritmética." +
+	"Responda em texto simples. Não use LaTeX nem notação matemática — escreva números normalmente."
   );
+
 
   async function callModel(state: typeof MessagesAnnotation.State) {
     const response = await llmWithTools.invoke([systemPrompt, ...state.messages]);
@@ -142,4 +151,6 @@ const graph = new StateGraph(MessagesAnnotation)
 	.addConditionalEdges("agent", toolsCondition, ["tools", END])
 	.addEdge("tools", "agent");
 
-export const agentGraph = graph.compile();
+
+const checkpointer = new MemorySaver();
+export const agentGraph = graph.compile({checkpointer});
