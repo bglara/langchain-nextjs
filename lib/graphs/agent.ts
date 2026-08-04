@@ -4,6 +4,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { llm } from "@/lib/llm";
 import { getRetriever } from "@/lib/rag";
+import { SystemMessage } from "@langchain/core/messages";
 
 /**
  * Parser recursivo descendente: entende SÓ números, + - * / e parênteses.
@@ -122,10 +123,17 @@ const searchNotes = tool(
 const tools = [calculator, searchNotes];
 const llmWithTools = llm.bindTools(tools);
 
-async function callModel(state: typeof MessagesAnnotation.State) {
-  const response = await llmWithTools.invoke(state.messages);
-  return { messages: [response] };
-}
+const systemPrompt = new SystemMessage(
+    "Você é um assistente com acesso a ferramentas. " +
+    "Se precisar de um número que você ainda não conhece, use search_notes para " +
+    "descobri-lo ANTES de chamar a calculadora. " +
+    "A calculadora aceita apenas números literais — nunca coloque palavras nela."
+  );
+
+  async function callModel(state: typeof MessagesAnnotation.State) {
+    const response = await llmWithTools.invoke([systemPrompt, ...state.messages]);
+    return { messages: [response] };
+  }
 
 const graph = new StateGraph(MessagesAnnotation)
 	.addNode("agent", callModel)
