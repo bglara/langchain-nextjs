@@ -1,0 +1,11 @@
+Nimbus Cloud Sync — Product FAQ
+
+Nimbus Cloud Sync is a file synchronization product made by Nimbus Robotics for internal fleet telemetry data.
+
+Pricing: Nimbus Cloud Sync costs $14 per month per drone unit, billed annually. A team plan covering up to 50 drones is available for a flat $499 per month.
+
+Refund policy: Customers may request a full refund within 45 days of purchase, no questions asked. Refunds are processed within 5 business days.
+
+Data retention: Telemetry data is retained for 18 months by default. Customers on the team plan can extend retention to 5 years for an additional fee.
+
+Support: Nimbus Cloud Sync support is available via email with a guaranteed response time of 4 business hours for team plan customers.
