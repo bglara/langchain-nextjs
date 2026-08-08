@@ -4,6 +4,7 @@ import { Document } from "@langchain/core/documents";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { MemoryVectorStore } from "@langchain/classic/vectorstores/memory";
 import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/huggingface_transformers";
+import { promptGuard } from "@/lib/llm";
 
 const embeddings = new HuggingFaceTransformersEmbeddings({
   model: "Xenova/all-MiniLM-L6-v2",
@@ -16,6 +17,32 @@ const embeddings = new HuggingFaceTransformersEmbeddings({
 // queries) — this cuts the clearest noise without being a complete fix.
 const SIMILARITY_THRESHOLD = 0.25;
 const RETRIEVAL_K = 4;
+
+// Calibrated empirically against this project's docs + a few injection
+// phrasings (see CLAUDE.md): real content scores ~0.0006, a blatant
+// "SYSTEM OVERRIDE, ignore instructions" attack scores ~0.999. 0.5 sits
+// comfortably between them, but a subtler injection attempt (no "ignore"
+// keyword) only scored ~0.04 — this layer catches obvious attacks, not all.
+const PROMPT_GUARD_THRESHOLD = 0.5;
+
+async function screenForInjection(docs: Document[]): Promise<Document[]> {
+  const scores = await Promise.all(
+    docs.map(async (doc) => {
+      const response = await promptGuard.invoke(doc.pageContent);
+      return parseFloat(response.content as string);
+    })
+  );
+
+  return docs.filter((doc, i) => {
+    const flagged = scores[i] >= PROMPT_GUARD_THRESHOLD;
+    if (flagged) {
+      console.warn(
+        `[PROMPT-GUARD] Filtered a chunk from "${doc.metadata.source}" (score: ${scores[i].toFixed(4)})`
+      );
+    }
+    return !flagged;
+  });
+}
 
 let retrieverPromise: ReturnType<typeof buildRetriever> | null = null;
 
@@ -42,9 +69,10 @@ async function buildRetriever() {
   return {
     async invoke(query: string) {
       const results = await store.similaritySearchWithScore(query, RETRIEVAL_K);
-      return results
+      const relevant = results
         .filter(([, score]) => score >= SIMILARITY_THRESHOLD)
         .map(([doc]) => doc);
+      return screenForInjection(relevant);
     },
   };
 }
