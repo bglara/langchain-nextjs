@@ -9,6 +9,14 @@ const embeddings = new HuggingFaceTransformersEmbeddings({
   model: "Xenova/all-MiniLM-L6-v2",
 });
 
+// Measured against this project's actual data/*.txt (see CONCEPTS.md history):
+// clearly-irrelevant queries score <0.05, while true positives ranged 0.32-0.81
+// depending on the question. No single threshold perfectly separates every
+// case (some noise scores higher than some true positives across DIFFERENT
+// queries) — this cuts the clearest noise without being a complete fix.
+const SIMILARITY_THRESHOLD = 0.25;
+const RETRIEVAL_K = 4;
+
 let retrieverPromise: ReturnType<typeof buildRetriever> | null = null;
 
 async function buildRetriever() {
@@ -24,7 +32,21 @@ async function buildRetriever() {
   const splitDocs = await splitter.splitDocuments(rawDocs);
 
   const store = await MemoryVectorStore.fromDocuments(splitDocs, embeddings);
-  return store.asRetriever();
+
+  // Not store.asRetriever() — MemoryVectorStore's retriever wrapper only
+  // exposes `k` and `searchType` ("similarity" | "mmr"), no score threshold.
+  // Filtering by score requires calling similaritySearchWithScore() directly.
+  // Same .invoke(query) -> Document[] shape as a real retriever, so both
+  // callers (app/api/ask-docs/route.ts and the search_notes tool) are
+  // unaffected by this being a plain object instead of a VectorStoreRetriever.
+  return {
+    async invoke(query: string) {
+      const results = await store.similaritySearchWithScore(query, RETRIEVAL_K);
+      return results
+        .filter(([, score]) => score >= SIMILARITY_THRESHOLD)
+        .map(([doc]) => doc);
+    },
+  };
 }
 
 export function getRetriever() {
