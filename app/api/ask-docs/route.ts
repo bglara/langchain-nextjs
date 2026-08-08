@@ -1,6 +1,6 @@
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { StringOutputParser } from "@langchain/core/output_parsers";
-import { llm } from "@/lib/llm";
+import { llm, llmFallback } from "@/lib/llm";
 import { getRetriever } from "@/lib/rag";
 
 const ragPrompt = ChatPromptTemplate.fromMessages([
@@ -8,7 +8,11 @@ const ragPrompt = ChatPromptTemplate.fromMessages([
   ["human", "{question}"],
 ]);
 
-const ragChain = ragPrompt.pipe(llm).pipe(new StringOutputParser());
+const resilientModel = llm
+  .withRetry({ stopAfterAttempt: 3 })
+  .withFallbacks([llmFallback.withRetry({ stopAfterAttempt: 2 })]);
+
+const ragChain = ragPrompt.pipe(resilientModel).pipe(new StringOutputParser());
 
 export async function POST(req: Request) {
   const { question } = await req.json();

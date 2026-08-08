@@ -11,7 +11,7 @@ import { toolsCondition } from "@langchain/langgraph/prebuilt";
 import { tool } from "@langchain/core/tools";
 import { AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { z } from "zod";
-import { llm } from "@/lib/llm";
+import { llm, llmFallback } from "@/lib/llm";
 import { getRetriever } from "@/lib/rag";
 
 
@@ -130,7 +130,13 @@ const searchNotes = tool(
 );
 
 const tools = [calculator, searchNotes];
-const llmWithTools = llm.bindTools(tools);
+
+// bindTools() must happen on each model BEFORE composing retry/fallback — the
+// fallback needs that same tools-bound shape too, not the bare chat model.
+const llmWithTools = llm
+  .bindTools(tools)
+  .withRetry({ stopAfterAttempt: 3 })
+  .withFallbacks([llmFallback.bindTools(tools).withRetry({ stopAfterAttempt: 2 })]);
 
 const systemPrompt = new SystemMessage(
     "You are an assistant with access to tools. " +
