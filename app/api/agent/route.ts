@@ -1,4 +1,4 @@
-import { Command, INTERRUPT, isInterrupted } from "@langchain/langgraph";
+import { Command } from "@langchain/langgraph";
 import { agentGraph } from "@/lib/graphs/agent";
 import {
   getOrCreateSessionId,
@@ -28,19 +28,40 @@ export async function POST(req: Request) {
     registerThread(sessionId, threadId);
   }
 
-  const config = { configurable: { thread_id: threadId } };
+  const config = { configurable: { thread_id: threadId }, streamMode: "updates" as const };
 
   // A resume request carries a decision instead of a new user message.
-  const result =
+  // Kept as two separate .stream() calls (not one behind a ternary variable)
+  // for the same reason as the old invoke() version: Command vs. plain state
+  // are different overloads, and TypeScript can't pick the right one once
+  // the value is stored in a variable of the union type.
+  const stream =
     resume !== undefined
-      ? await agentGraph.invoke(new Command({ resume }), config)
-      : await agentGraph.invoke({ messages: [{ role: "user", content: message }] }, config);
+      ? await agentGraph.stream(new Command({ resume }), config)
+      : await agentGraph.stream({ messages: [{ role: "user", content: message }] }, config);
 
-  const body = isInterrupted<{ action: string; args: unknown }>(result)
-    ? { interrupted: true, pending: result[INTERRUPT][0].value }
-    : { interrupted: false, answer: result.messages[result.messages.length - 1].content };
+  // Each line is one JSON-encoded graph event: { agent: {...} }, { tools: {...} },
+  // or { __interrupt__: [...] } when the graph pauses for approval. Newline-delimited
+  // JSON (NDJSON) instead of one giant JSON array, so the client can process each
+  // event as it arrives instead of waiting for the whole run to finish.
+  const encoder = new TextEncoder();
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const chunk of stream) {
+          controller.enqueue(encoder.encode(JSON.stringify(chunk) + "\n"));
+        }
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
 
-  return Response.json(body, {
-    headers: { "Set-Cookie": sessionCookieHeader(sessionId) },
+  return new Response(readable, {
+    headers: {
+      "Set-Cookie": sessionCookieHeader(sessionId),
+      "Content-Type": "application/x-ndjson",
+    },
   });
 }

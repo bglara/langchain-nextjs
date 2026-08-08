@@ -40,6 +40,7 @@ export default function Home() {
     action: string;
     args: unknown;
   } | null>(null);
+  const [agentStatus, setAgentStatus] = useState<string | null>(null);
 
   // Generated client-side (not during SSR) to avoid a hydration mismatch.
   useEffect(() => {
@@ -50,6 +51,7 @@ export default function Home() {
     setThreadId(crypto.randomUUID());
     setAgentMessages([]);
     setPendingApproval(null);
+    setAgentStatus(null);
   }
 
   async function sendMessage(e: React.FormEvent) {
@@ -114,20 +116,58 @@ export default function Home() {
     setAsking(false);
   }
 
-  // Shared by both the initial send and the approve/reject resume: a call to
-  // /api/agent either finishes normally (interrupted: false) or comes back
-  // paused waiting on a decision (interrupted: true).
-  function handleAgentResponse(data: {
-    interrupted: boolean;
-    answer?: string;
-    pending?: { action: string; args: unknown };
-  }) {
-    if (data.interrupted) {
-      setPendingApproval(data.pending!);
-    } else {
-      setPendingApproval(null);
-      setAgentMessages((prev) => [...prev, { role: "assistant", content: data.answer! }]);
+  // Each NDJSON line from /api/agent is one LangGraph "updates" event:
+  //   { agent: { messages: [AIMessage-like] } }   — the model ran
+  //   { tools: { messages: [ToolMessage-like] } } — a tool finished
+  //   { __interrupt__: [{ value: { action, args } }] } — paused for approval
+  // Messages are LangChain's serialized form, so the actual text/tool_calls
+  // live under `.kwargs`, same shape you'd see calling these routes with curl.
+  function handleAgentEvent(event: Record<string, unknown>) {
+    if (event.__interrupt__) {
+      const interrupts = event.__interrupt__ as { value: { action: string; args: unknown } }[];
+      setPendingApproval(interrupts[0].value);
+      setAgentStatus(null);
+      return;
     }
+
+    if (event.agent) {
+      const aiMessage = (event.agent as { messages: { kwargs: { content: string; tool_calls?: { name: string }[] } }[] })
+        .messages[0].kwargs;
+      const toolCalls = aiMessage.tool_calls ?? [];
+
+      if (toolCalls.length > 0) {
+        // The model decided to call one or more tools — not the final answer yet.
+        setAgentStatus(`calling ${toolCalls.map((c) => c.name).join(", ")}...`);
+      } else {
+        setAgentMessages((prev) => [...prev, { role: "assistant", content: aiMessage.content }]);
+        setAgentStatus(null);
+      }
+      return;
+    }
+
+    if (event.tools) {
+      setAgentStatus("processing tool result...");
+    }
+  }
+
+  async function consumeAgentStream(res: Response) {
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop()!; // last entry may be a partial line — keep it for next read
+
+      for (const line of lines) {
+        if (line.trim()) handleAgentEvent(JSON.parse(line));
+      }
+    }
+
     setAgentThinking(false);
   }
 
@@ -138,6 +178,7 @@ export default function Home() {
     setAgentInput("");
     setAgentMessages((prev) => [...prev, { role: "user", content: userInput }]);
     setAgentThinking(true);
+    setAgentStatus("thinking...");
 
     // Send ONLY the new message — history lives in the server's checkpointer.
     const res = await fetch("/api/agent", {
@@ -145,18 +186,20 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: userInput, threadId }),
     });
-    handleAgentResponse(await res.json());
+    await consumeAgentStream(res);
   }
 
   async function respondToApproval(approved: boolean) {
+    setPendingApproval(null);
     setAgentThinking(true);
+    setAgentStatus("thinking...");
 
     const res = await fetch("/api/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ threadId, resume: { approved } }),
     });
-    handleAgentResponse(await res.json());
+    await consumeAgentStream(res);
   }
 
   return (
@@ -321,9 +364,9 @@ export default function Home() {
                 </div>
               ))}
 
-              {agentThinking && !pendingApproval && (
+              {agentThinking && !pendingApproval && agentStatus && (
                 <div className="self-start rounded-2xl bg-zinc-200 dark:bg-zinc-800 px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
-                  thinking (may be using tools)...
+                  {agentStatus}
                 </div>
               )}
 
