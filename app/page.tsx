@@ -36,6 +36,10 @@ export default function Home() {
   const [agentInput, setAgentInput] = useState("");
   const [agentThinking, setAgentThinking] = useState(false);
   const [threadId, setThreadId] = useState("");
+  const [pendingApproval, setPendingApproval] = useState<{
+    action: string;
+    args: unknown;
+  } | null>(null);
 
   // Generated client-side (not during SSR) to avoid a hydration mismatch.
   useEffect(() => {
@@ -45,6 +49,7 @@ export default function Home() {
   function newThread() {
     setThreadId(crypto.randomUUID());
     setAgentMessages([]);
+    setPendingApproval(null);
   }
 
   async function sendMessage(e: React.FormEvent) {
@@ -109,6 +114,23 @@ export default function Home() {
     setAsking(false);
   }
 
+  // Shared by both the initial send and the approve/reject resume: a call to
+  // /api/agent either finishes normally (interrupted: false) or comes back
+  // paused waiting on a decision (interrupted: true).
+  function handleAgentResponse(data: {
+    interrupted: boolean;
+    answer?: string;
+    pending?: { action: string; args: unknown };
+  }) {
+    if (data.interrupted) {
+      setPendingApproval(data.pending!);
+    } else {
+      setPendingApproval(null);
+      setAgentMessages((prev) => [...prev, { role: "assistant", content: data.answer! }]);
+    }
+    setAgentThinking(false);
+  }
+
   async function sendToAgent(e: React.FormEvent) {
     e.preventDefault();
 
@@ -123,10 +145,18 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: userInput, threadId }),
     });
-    const data = await res.json();
+    handleAgentResponse(await res.json());
+  }
 
-    setAgentMessages((prev) => [...prev, { role: "assistant", content: data.answer }]);
-    setAgentThinking(false);
+  async function respondToApproval(approved: boolean) {
+    setAgentThinking(true);
+
+    const res = await fetch("/api/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threadId, resume: { approved } }),
+    });
+    handleAgentResponse(await res.json());
   }
 
   return (
@@ -291,9 +321,38 @@ export default function Home() {
                 </div>
               ))}
 
-              {agentThinking && (
+              {agentThinking && !pendingApproval && (
                 <div className="self-start rounded-2xl bg-zinc-200 dark:bg-zinc-800 px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
                   thinking (may be using tools)...
+                </div>
+              )}
+
+              {pendingApproval && (
+                <div className="self-start max-w-[90%] rounded-2xl border border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950 px-4 py-3 text-sm text-black dark:text-white">
+                  <p className="font-medium mb-1">Approval needed</p>
+                  <p className="mb-2">
+                    The agent wants to call{" "}
+                    <span className="font-mono">{pendingApproval.action}</span> with:
+                  </p>
+                  <pre className="mb-3 overflow-x-auto rounded-lg bg-black/5 dark:bg-white/10 px-2 py-1 text-xs">
+                    {JSON.stringify(pendingApproval.args, null, 2)}
+                  </pre>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => respondToApproval(true)}
+                      disabled={agentThinking}
+                      className="rounded-full bg-black dark:bg-white text-white dark:text-black px-4 py-1.5 text-xs font-medium disabled:opacity-40"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => respondToApproval(false)}
+                      disabled={agentThinking}
+                      className="rounded-full border border-zinc-300 dark:border-zinc-700 px-4 py-1.5 text-xs font-medium disabled:opacity-40"
+                    >
+                      Reject
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -303,11 +362,12 @@ export default function Home() {
                 value={agentInput}
                 onChange={(e) => setAgentInput(e.target.value)}
                 placeholder="Ask the agent something..."
-                className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-black px-4 py-2 text-black dark:text-white outline-none"
+                disabled={!!pendingApproval}
+                className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-black px-4 py-2 text-black dark:text-white outline-none disabled:opacity-40"
               />
               <button
                 type="submit"
-                disabled={agentThinking || !agentInput || !threadId}
+                disabled={agentThinking || !agentInput || !threadId || !!pendingApproval}
                 className="rounded-full bg-black dark:bg-white text-white dark:text-black px-5 py-2 font-medium disabled:opacity-40"
               >
                 Send

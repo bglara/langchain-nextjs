@@ -3,15 +3,16 @@ import {
 	START,
 	END,
 	MessagesAnnotation,
+	MemorySaver,
+	interrupt,
+	Command,
 } from "@langchain/langgraph";
-import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+import { toolsCondition } from "@langchain/langgraph/prebuilt";
 import { tool } from "@langchain/core/tools";
+import { AIMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import { llm } from "@/lib/llm";
 import { getRetriever } from "@/lib/rag";
-import { SystemMessage } from "@langchain/core/messages";
-import { MemorySaver } from "@langchain/langgraph";
-
 
 
 /**
@@ -144,12 +145,94 @@ const systemPrompt = new SystemMessage(
     return { messages: [response] };
   }
 
+  const toolsByName = new Map<string, (typeof tools)[number]>(tools.map((t) => [t.name, t]));
+const TOOLS_REQUIRING_APPROVAL = new Set(["calculator"]);
+
+async function toolsNodeWithApproval(state: typeof MessagesAnnotation.State) {
+  const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
+  const toolCalls = lastMessage.tool_calls ?? [];
+
+  const results: ToolMessage[] = [];
+  let rejectedAction: { name: string; args: unknown } | null = null;
+
+  for (const call of toolCalls) {
+    if (rejectedAction) {
+      // A previous call in this same batch was already rejected. Don't run
+      // any more tools — but every tool_call_id still needs a ToolMessage,
+      // or the next call to Groq will error out over an unanswered call.
+      results.push(
+        new ToolMessage({
+          content: "Skipped: a previous tool call in this turn was rejected.",
+          tool_call_id: call.id!,
+        })
+      );
+      continue;
+    }
+
+    if (TOOLS_REQUIRING_APPROVAL.has(call.name)) {
+      const decision = interrupt({
+        action: call.name,
+        args: call.args,
+      });
+
+      if (!decision.approved) {
+        rejectedAction = { name: call.name, args: call.args };
+        results.push(
+          new ToolMessage({
+            content: "Tool call rejected by the user.",
+            tool_call_id: call.id!,
+          })
+        );
+        continue;
+      }
+    }
+
+    const selectedTool = toolsByName.get(call.name)!;
+    // Cast needed: TS can't unify differently-schemad tools' .invoke() overloads
+    // in a union type — at runtime, `call.name` guarantees the args match.
+    const output = await (selectedTool.invoke as (input: unknown) => Promise<unknown>)(call.args);
+    results.push(
+      new ToolMessage({
+        content: String(output),
+        tool_call_id: call.id!,
+      })
+    );
+  }
+
+  if (rejectedAction) {
+    // Deterministic short-circuit: end the turn here with a FIXED message
+    // instead of handing control back to the model. A rejection blocks the
+    // ACTION (the tool never ran, confirmed above) — but if we looped back
+    // to "agent", the model would be free to reach the same answer some
+    // other way (e.g. doing the math itself), silently defeating the
+    // approval gate. Ending on a hardcoded string guarantees the rejection
+    // is also reflected in the OUTCOME, not just in whether the tool ran.
+    return new Command({
+      update: {
+        messages: [
+          ...results,
+          new AIMessage(
+            `I can't help with that — the "${rejectedAction.name}" call was rejected, and I won't try to work around it another way.`
+          ),
+        ],
+      },
+      goto: END,
+    });
+  }
+
+  // No rejection: same destination the static edge used to provide, but
+  // now expressed as a Command too — a node can't dynamically choose its
+  // destination on one path (above) while relying on a fixed edge for the
+  // other. Both paths need to say explicitly where they're going.
+  return new Command({ update: { messages: results }, goto: "agent" });
+}
+
+
 const graph = new StateGraph(MessagesAnnotation)
 	.addNode("agent", callModel)
-	.addNode("tools", new ToolNode(tools))
+	.addNode("tools", toolsNodeWithApproval)
 	.addEdge(START, "agent")
-	.addConditionalEdges("agent", toolsCondition, ["tools", END])
-	.addEdge("tools", "agent");
+	.addConditionalEdges("agent", toolsCondition, ["tools", END]);
 
 
 const checkpointer = new MemorySaver();
