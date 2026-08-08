@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# langchain-nextjs
 
-## Getting Started
+A LangChain.js / LangGraph.js learning project built with Next.js and Groq.
 
-First, run the development server:
+## Overview
+
+This project ports LangChain and LangGraph concepts — originally studied in Python (see the sibling project `~/learning/langchain-langgraph`) — into a TypeScript/Next.js app. It grew from a single chat endpoint into a small suite of features that each demonstrate a different piece of the LangChain.js / LangGraph.js API surface, from basic LLM calls all the way to a tool-calling agent with human-in-the-loop approval and persistent memory.
+
+## Features
+
+- **Chat** — streaming, multi-turn chat using an LCEL chain (`prompt.pipe(llm).pipe(parser)`).
+- **Summarize** — turns the chat conversation into structured JSON (title, key points, action items) via `withStructuredOutput` + Zod.
+- **Ask Your Notes** — RAG question-answering over a small set of sample documents (`data/*.txt`), using local embeddings (no external embeddings API needed).
+- **Agent** — a LangGraph `StateGraph` agent with two tools (a hand-rolled calculator and a notes-search tool built on the same RAG retriever), thread-scoped memory via a checkpointer, and human-in-the-loop approval before running the calculator tool.
+
+## Tech stack
+
+- [Next.js](https://nextjs.org) (App Router) + TypeScript + Tailwind CSS
+- [LangChain.js](https://js.langchain.com) (`langchain`, `@langchain/core`, `@langchain/groq`, `@langchain/textsplitters`, `@langchain/classic`, `@langchain/community`)
+- [LangGraph.js](https://langchain-ai.github.io/langgraphjs/) (`@langchain/langgraph`)
+- [Groq](https://groq.com) as the LLM provider (`openai/gpt-oss-120b`)
+- Local embeddings via `@huggingface/transformers` (no embeddings API key required)
+- pnpm as the package manager
+
+## Getting started
+
+**Prerequisites:** Node.js, pnpm.
+
+**Environment variables** — create `.env.local` at the project root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+GROQ_API_KEY=your_key_here
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Install and run:**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm install
+pnpm dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+If `pnpm install` reports `ERR_PNPM_IGNORED_BUILDS`, run `pnpm approve-builds` (some dependencies use native build scripts pnpm blocks by default).
 
-To learn more about Next.js, take a look at the following resources:
+## Project structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `app/page.tsx` — the tabbed UI (Chat / Summarize / Ask Your Notes / Agent).
+- `app/api/*/route.ts` — one Route Handler per feature.
+- `lib/llm.ts` — the shared Groq client.
+- `lib/chains/*.ts` — LCEL chains for chat and summarization.
+- `lib/rag.ts` — the RAG retrieval pipeline, shared by the RAG tab and the agent's notes-search tool.
+- `lib/graphs/agent.ts` — the LangGraph agent (state, tools, human-in-the-loop, checkpointer).
+- `data/*.txt` — sample documents for the RAG feature.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+See [`CLAUDE.md`](./CLAUDE.md) for deeper architectural notes, and [`CONCEPTS.md`](./CONCEPTS.md) for a running log of the LangChain/LangGraph concepts covered along the way.
 
-## Deploy on Vercel
+## Related resources
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Sibling Python project: `~/learning/langchain-langgraph` — the original LangChain/LangGraph study project this one ports concepts from.
