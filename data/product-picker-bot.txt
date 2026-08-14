@@ -1,0 +1,9 @@
+Magpie Picker — Product Spec
+
+The Magpie Picker is a floor AMR (autonomous mobile robot) for case-pick aisles. Throughput: about 800 picks per hour in a standard 12-meter aisle with human-in-the-loop exception handling.
+
+Magpie does not fly. It must not be confused with the Atlas X7 drone. Mixed Atlas+Magpie sites use Cloud Sync as the shared telemetry bus.
+
+Safety: Magpie stops if a human enters its 1.5 m LIDAR keep-out. ISO 3691-4 certified.
+
+Software subscription is required for aisle maps; a disconnected Magpie will idle after 15 minutes.

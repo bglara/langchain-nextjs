@@ -1,0 +1,9 @@
+Telemetry Data Retention
+
+Default retention for Atlas and Magpie telemetry in Cloud Sync is 18 months. After 18 months, raw video is deleted; 1 Hz numeric traces remain as monthly rollups for 2 more years.
+
+Team-plan customers may buy extended raw retention of 5 years at $2 per drone per month, SKU SYNC-RET-5Y.
+
+GDPR deletion requests are fulfilled within 30 days by Data Eng; file ticket prefix PRIV-DEL.
+
+Warehouse customer names in telemetry metadata must be hashed before any dataset leaves production.

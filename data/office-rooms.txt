@@ -1,0 +1,13 @@
+Beacon Tower Meeting Rooms (4th floor)
+
+Orion: 12 seats, display + whiteboard, bookable. Best for all-hands of a squad.
+
+Vega: 6 seats, display only. Default for candidate interviews.
+
+Pulsar: 4 seats, no display — huddle only.
+
+Whisper: 1-person phone booth. Max booking 60 minutes.
+
+Dock-A: warehouse-floor briefing area on the basement lab, 20 standing, noisy, not for customer calls.
+
+Book through the assistant's book_room tool or the Rooms calendar. Double-booking Orion is the most common conflict on Tuesday afternoons.

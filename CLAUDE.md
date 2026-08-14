@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. **This file must always be written in English**, even though conversation with the user happens in Portuguese.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. Cursor agents use [`AGENTS.md`](./AGENTS.md) as their working-mode overlay and should still follow this file for architecture. **This file must always be written in English**, even though conversation with the user happens in Portuguese.
 
 ## Project overview
 
-A learning project porting LangChain.js and LangGraph.js concepts (originally studied in Python, in a sibling project `~/learning/langchain-langgraph`) into a Next.js app, using Groq as the LLM provider. It has grown to include: a streaming chat, a structured-output summarizer, a RAG Q&A feature, and a tool-calling LangGraph agent with human-in-the-loop approval and thread-scoped memory.
+A learning project porting LangChain.js and LangGraph.js concepts (originally studied in Python, in a sibling project `~/learning/langchain-langgraph`) into a Next.js app, using Groq as the LLM provider. It has grown to include: a streaming chat, a structured-output summarizer, a RAG Q&A feature, a tool-calling LangGraph agent with human-in-the-loop approval and thread-scoped memory, and optional LangSmith tracing in the UI.
 
 ## Role
 
@@ -53,6 +53,7 @@ Package manager is **pnpm** — do not use npm/yarn. Some dependencies (`onnxrun
 ## Environment
 
 - `GROQ_API_KEY` goes in `.env.local` (gitignored via the `.env*` pattern).
+- LangSmith is opt-in: `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY`, optional `LANGSMITH_PROJECT`. Set `LANGCHAIN_CALLBACKS_BACKGROUND=false` so a Route Handler does not freeze before traces flush. Without these vars, the app runs as before and the UI hides the trace panel.
 
 ## Architecture
 
@@ -63,21 +64,27 @@ Package manager is **pnpm** — do not use npm/yarn. Some dependencies (`onnxrun
 
 Don't collapse one into the other — the chains stay simple on purpose where no branching/looping is needed.
 
+### `lib/tracing.ts` is the single point of LangSmith parent spans
+
+Each Route Handler calls `startApiTrace(name)` so the run id exists before the `Response` is created (needed for streaming headers). LangChain/LangGraph work runs inside `trace.run(...)` via `withRunTree`. The client only sees `x-langsmith-run-id` / `x-langsmith-trace-url`; 👍/👎 go to `app/api/feedback/route.ts`, which uses `langsmith.Client` on the server. Never import `langsmith` from a `"use client"` file.
+
 ### `lib/llm.ts` is the single point of model configuration
 
 Every chain and the agent import the shared `llm` from here. It's pinned to `openai/gpt-oss-120b`, **not** `llama-3.3-70b-versatile` — Llama 3.3 was found to deterministically emit malformed tool-call syntax on any prompt requiring two sequential tool calls (Groq-side parsing of its `<function=...>` pseudo-XML format broke). Don't revert this without re-verifying multi-step tool-calling reliability first.
 
 ### `lib/rag.ts` is a shared singleton with two different consumers
 
-`getRetriever()` builds the vector store once (`RecursiveCharacterTextSplitter` → `HuggingFaceTransformersEmbeddings`, local/no API key → `MemoryVectorStore` over `data/*.txt`) and caches it in a module-level promise. It's called both by `/api/ask-docs` (always retrieves, for every question — "fixed" RAG) and by the `search_notes` tool inside `lib/graphs/agent.ts` (the model decides whether to call it — "agentic" RAG). Changes to retrieval behavior affect both call sites.
+`getRetriever()` builds the vector store once (`RecursiveCharacterTextSplitter` → `HuggingFaceTransformersEmbeddings`, local/no API key → `MemoryVectorStore` over `data/*.txt`) and caches it in a module-level promise. It's called both by `/api/ask-docs` (always retrieves, for every question — "fixed" RAG) and by the `search_notes` node inside `lib/graphs/agent.ts` (the model decides whether to call it — "agentic" RAG). Changes to retrieval behavior affect both call sites.
 
-Retrieval has two filtering passes before a chunk reaches either consumer: a similarity-score threshold (`SIMILARITY_THRESHOLD`), then a prompt-injection screen (`screenForInjection`, using the `promptGuard` classifier from `lib/llm.ts` — `meta-llama/llama-prompt-guard-2-22m` via Groq). The guard is a defense-in-depth layer, not a replacement for the anti-injection instructions in `app/api/ask-docs/route.ts` and `lib/graphs/agent.ts`'s system prompts — see "Known limitations" for its measured false-negative rate.
+Each query runs five passes: BM25 keyword search, MMR vector search (cosine threshold still applied on the vector branch), Reciprocal Rank Fusion of the two lists, an LLM re-ranker (`withStructuredOutput`) down to 4 chunks, then `screenForInjection` (`promptGuard` from `lib/llm.ts` — `meta-llama/llama-prompt-guard-2-22m` via Groq). The guard is a defense-in-depth layer, not a replacement for the anti-injection instructions in `app/api/ask-docs/route.ts` and `lib/graphs/agent.ts`'s system prompts — see "Known limitations" for its measured false-negative rate.
 
-### `lib/graphs/agent.ts`: a hand-written tool-execution node, not the prebuilt `ToolNode`
+### `lib/graphs/agent.ts`: custom state, parallel tool nodes, a join — not the prebuilt `ToolNode`
 
-The `"tools"` node is custom rather than LangGraph's prebuilt `ToolNode`, specifically to support human-in-the-loop approval: calls to `calculator` trigger `interrupt()` before executing, pausing the graph (persisted via the `MemorySaver` checkpointer) until `app/api/agent/route.ts` resumes it with `new Command({ resume })`. A rejection short-circuits straight to `END` with a hardcoded message via `new Command({ goto: END, update: {...} })` — it deliberately does **not** hand control back to the model, because doing so lets the model route around the rejection (e.g. computing the arithmetic itself instead of respecting it).
+State is `Annotation.Root` with `messages` (the same reducer as `MessagesAnnotation`), `sources` (union of filenames from `search_notes`), and `rejected` (last-value flag, reset to `false` on every `agent` turn so a prior rejection cannot leak through the checkpointer).
 
-Load-bearing gotcha, reproduced empirically in this repo: a node that returns `Command(goto=...)` on some code paths must do so on **all** of its paths — it cannot mix `Command`-based routing with a static `.addEdge()` from the same node. Both fire; the static edge is not overridden by the `Command`. (`toolsNodeWithApproval` always returns a `Command`, on every path, for exactly this reason — see the comment above the final `return`.)
+The model still `bindTools` the calculator, `search_notes`, and `book_room` schemas. Execution is split: `routeAfterAgent` returns `"search_notes"`, `"calculator"`, `"book_room"`, or any combination (same superstep). Each tool node writes state and uses a **static** edge to `join_tools`. `join_tools` is the only place that routes to `"agent"` or `END`. Calculator and `book_room` calls `interrupt()` for human approval; a rejection sets `rejected: true` and `join_tools` emits the hardcoded refusal — it deliberately does **not** hand control back to the model. HITL nodes omit `rejected` on approve so a parallel approval cannot overwrite a rejection.
+
+Do not mix `Command(goto=...)` with a static `.addEdge()` from the same node (both fire). That is why the tool nodes never return `Command`; only `join_tools` decides the next step, via `addConditionalEdges`.
 
 ### `app/page.tsx` is one client component with four tabs, no router
 

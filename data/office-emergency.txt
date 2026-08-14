@@ -1,0 +1,9 @@
+Emergency and Safety
+
+Muster point: Beacon Tower plaza, west fountain. Do not re-enter until Facilities all-clears in Slack #safety.
+
+AED and first-aid kit: 4th floor kitchen, left of the snack shelves. Fire extinguishers: kitchen and by Orion.
+
+Lab: lithium battery fire protocol is the sand bucket in Dock-A, not water. Call 911 then page Facilities.
+
+Earthquake: drop, cover, hold. Atlas drones auto-land on seismic interrupt if firmware >= 4.1.8.

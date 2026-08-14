@@ -1,0 +1,9 @@
+Okta and SSO
+
+All SaaS (Workday, Concur, Navan, GitHub, LaunchDarkly, PagerDuty) is behind Okta SSO. Password login to those apps is disabled.
+
+MFA: Okta Verify push. SMS MFA is not offered. Hardware keys (YubiKey) are required for employees with production AWS access.
+
+Deprovisioning: People Ops offboards in Workday, which triggers Okta deactivate within 30 minutes. Managers must not "keep the account a few days."
+
+Break-glass Okta admin is held by Security on-call, not Engineering on-call.

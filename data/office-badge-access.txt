@@ -1,0 +1,9 @@
+Badge Access
+
+Employee badges open the 4th floor and the basement robotics lab. Guest badges open the 4th floor lobby and Orion/Vega only — not Dock-A, not the lab.
+
+Outside 8:00–19:00 weekdays, badge + PIN is required. PIN resets at the front desk; IT cannot reset PINs.
+
+Lost badge: deactivate in Okta then pay $25 replacement. Report loss the same day; an active lost badge is a security incident (see security-vpn).
+
+Contractors get 90-day badges. Extensions need the hiring manager in the badge form.

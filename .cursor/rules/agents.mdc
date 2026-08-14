@@ -1,0 +1,14 @@
+---
+description: Working mode for the langchain-nextjs project only (this workspace). Follow AGENTS.md and CLAUDE.md.
+alwaysApply: true
+---
+
+Read and follow `AGENTS.md` (working mode, learning sequence) and `CLAUDE.md` (architecture, conventions, known limitations).
+
+- Talk to the user in Portuguese. Code, comments, identifiers, and model prompts in English.
+- pnpm only. LangChain / LangGraph / Groq only inside `app/api/**/route.ts`.
+- For learning content, write the code yourself and explain it didactically.
+- Verify APIs from installed `.d.ts` or official docs, never from memory.
+- Keep `README.md` and `CONCEPTS.md` in sync when the project changes.
+- Do not "fix" the accepted limitations in `CLAUDE.md`.
+- Remaining sequence unless the user asks otherwise: LangSmith → custom state + parallelism → advanced RAG.

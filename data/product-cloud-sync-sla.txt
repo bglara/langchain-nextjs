@@ -1,0 +1,9 @@
+Nimbus Cloud Sync Service Level Agreement
+
+Uptime target: 99.9% monthly, excluding announced Sunday maintenance (02:00–04:00 Pacific).
+
+Team plan (the $499/month 50-drone plan): support email response in 4 business hours. Standard plan: 1 business day.
+
+Service credits: 10% of monthly Cloud Sync fees if monthly uptime is under 99.9% but at or above 99.0%; 25% if under 99.0%. Credits are the sole remedy.
+
+SEV1 Cloud Sync outages page the Atlas on-call, not Magpie on-call.

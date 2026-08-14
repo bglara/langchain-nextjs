@@ -1,4 +1,5 @@
 import { Command } from "@langchain/langgraph";
+import { HumanMessage } from "@langchain/core/messages";
 import { agentGraph } from "@/lib/graphs/agent";
 import {
   getOrCreateSessionId,
@@ -7,6 +8,7 @@ import {
   registerThread,
   sessionCookieHeader,
 } from "@/lib/sessions";
+import { langSmithHeaders, startApiTrace } from "@/lib/tracing";
 
 export async function POST(req: Request) {
   const { message, threadId, resume } = await req.json();
@@ -29,30 +31,35 @@ export async function POST(req: Request) {
   }
 
   const config = { configurable: { thread_id: threadId }, streamMode: "updates" as const };
+  const trace = await startApiTrace(
+    resume !== undefined ? "POST /api/agent (resume)" : "POST /api/agent",
+  );
 
-  // A resume request carries a decision instead of a new user message.
-  // Kept as two separate .stream() calls (not one behind a ternary variable)
-  // for the same reason as the old invoke() version: Command vs. plain state
-  // are different overloads, and TypeScript can't pick the right one once
-  // the value is stored in a variable of the union type.
-  const stream =
-    resume !== undefined
-      ? await agentGraph.stream(new Command({ resume }), config)
-      : await agentGraph.stream({ messages: [{ role: "user", content: message }] }, config);
-
-  // Each line is one JSON-encoded graph event: { agent: {...} }, { tools: {...} },
-  // or { __interrupt__: [...] } when the graph pauses for approval. Newline-delimited
-  // JSON (NDJSON) instead of one giant JSON array, so the client can process each
-  // event as it arrives instead of waiting for the whole run to finish.
   const encoder = new TextEncoder();
   const readable = new ReadableStream({
     async start(controller) {
       try {
-        for await (const chunk of stream) {
-          controller.enqueue(encoder.encode(JSON.stringify(chunk) + "\n"));
-        }
+        await trace.run(async () => {
+          // Kept as two separate .stream() calls (not one behind a ternary)
+          // because Command vs. plain state are different overloads, and
+          // TypeScript can't pick the right one once the value is stored in
+          // a variable of the union type.
+          const stream =
+            resume !== undefined
+              ? await agentGraph.stream(new Command({ resume }), config)
+              : await agentGraph.stream(
+                  { messages: [new HumanMessage(message)] },
+                  config,
+                );
+
+          for await (const chunk of stream) {
+            controller.enqueue(encoder.encode(JSON.stringify(chunk) + "\n"));
+          }
+        });
         controller.close();
+        await trace.end();
       } catch (error) {
+        await trace.end(error);
         controller.error(error);
       }
     },
@@ -62,6 +69,7 @@ export async function POST(req: Request) {
     headers: {
       "Set-Cookie": sessionCookieHeader(sessionId),
       "Content-Type": "application/x-ndjson",
+      ...(await langSmithHeaders(trace.runId)),
     },
   });
 }

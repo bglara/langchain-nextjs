@@ -1,0 +1,9 @@
+Nimbus Health Insurance — Helios Health PPO
+
+Plan name: Helios Health PPO (carrier Helios). Nimbus pays 80% of the employee premium and 50% of dependent premiums.
+
+In-network deductible: $750 individual / $1,500 family. Out-of-pocket max: $4,000 / $8,000.
+
+Enrollment window: first 30 days of employment, or annual open enrollment 1–30 November, coverage starting 1 January.
+
+Dental (BrightSmile) and vision (OptiClear) are separate and 100% employee-paid. FSA contribution max follows IRS limits; Nimbus does not offer an HSA with this PPO.

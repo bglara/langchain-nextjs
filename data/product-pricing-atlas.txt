@@ -1,0 +1,9 @@
+Atlas X7 Pricing Sheet (internal)
+
+List price: $4,200 per Atlas X7 airframe, not including batteries. A 10-unit or larger order receives 12% off list (unit price $3,696).
+
+Batteries: $180 each. Recommended 3 packs per drone. Charging dock (6-bay): $640.
+
+Cloud Sync is billed separately at $14 per drone per month (see product FAQ). Hardware discounts do not apply to Cloud Sync.
+
+Quotes older than 45 days must be re-priced. Only Sales Ops can issue SKU ATLAS-X7-HW.

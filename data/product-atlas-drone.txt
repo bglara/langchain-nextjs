@@ -1,0 +1,9 @@
+Atlas X7 Warehouse Drone — Product Spec
+
+The Atlas X7 is Nimbus's flagship indoor warehouse drone. Payload: 12 kg. Typical flight time: 40 minutes with a standard pack, 28 minutes at max payload.
+
+Navigation uses ceiling UWB beacons plus downward optical flow. It is not rated for outdoor flight or for people-moving.
+
+Fleet telemetry ships to Nimbus Cloud Sync. Minimum firmware for Cloud Sync pairing is Atlas 4.2.1. Do not skip 4.1.x when upgrading from 4.0.
+
+A spare battery cycle is rated 500 charges. Replace packs that report under 80% health in the Atlas Bay app.

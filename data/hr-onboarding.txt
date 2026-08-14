@@ -1,0 +1,9 @@
+New Hire Onboarding Bootcamp
+
+Every new employee attends a 5-day in-person bootcamp at Beacon Tower, starting their first Monday. Days 1–2 are company and product; days 3–5 are role-specific with an assigned buddy.
+
+Laptop imaging happens on Day 1 by 10:00. If imaging slips past noon, IT issues a loaner Atlas-lab laptop tagged LOANER-ATLAS.
+
+Buddies are paid a $200 recognition bonus after the new hire's 30-day check-in is marked complete in Workday.
+
+Fully remote exceptions to the bootcamp require director approval; those hires still fly in for Days 1–2.

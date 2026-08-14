@@ -1,0 +1,9 @@
+Firmware Matrix (support)
+
+Atlas X7 current stable: 4.2.1. Previous stable: 4.1.8. Upgrading from 4.0.x MUST install 4.1.8 first; jumping 4.0 → 4.2 bricks the UWB board.
+
+Magpie Picker current stable: 2.8.0. Beta 2.9.0-rc2 is warehouse-lab only (Dock-A), not customer sites.
+
+Cloud Sync agent on the drone: bundle 18.4. Mismatched agent vs cloud API (cloud is 18.x) causes duplicate telemetry rows.
+
+Never flash Magpie firmware onto an Atlas, or the reverse. The bootloaders reject the image but the attempt still voids the hardware warranty.

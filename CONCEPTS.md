@@ -196,3 +196,101 @@ const ragPrompt = ChatPromptTemplate.fromMessages([
   ["human", "{question}"],
 ]);
 ```
+
+## LangSmith tracing
+
+A trace is a tree of spans for one request: the HTTP handler is the parent, and every nested LangChain/LangGraph call becomes a child. Enable it with `LANGSMITH_TRACING=true` plus `LANGSMITH_API_KEY`. This project opens the parent span itself (`RunTree` + `withRunTree`) so the run id exists *before* a stream starts and can go in the response headers.
+
+```ts
+const tree = new RunTree({ name: "POST /api/chat", run_type: "chain" });
+await tree.postRun();
+await withRunTree(tree, () => chatChain.stream({ messages }));
+await tree.end({ ok: true });
+await tree.patchRun();
+```
+
+## Run id in the UI / feedback
+
+The browser never sees `LANGSMITH_API_KEY`. It only receives `x-langsmith-run-id` (and a trace URL) on the response, then posts `{ runId, score }` to `/api/feedback`, which calls `client.createFeedback` on the server.
+
+```ts
+return new Response(body, {
+  headers: {
+    "x-langsmith-run-id": runId,
+    "x-langsmith-trace-url": `${host}/runs/${runId}`,
+    "Access-Control-Expose-Headers": "x-langsmith-run-id, x-langsmith-trace-url",
+  },
+});
+```
+
+## Custom graph state (`Annotation.Root`)
+
+`MessagesAnnotation` is just `{ messages }` with an append reducer. `Annotation.Root` lets you add fields. Each field needs a reducer if two nodes might write it in the same superstep — otherwise one update overwrites the other.
+
+```ts
+const AgentState = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: messagesStateReducer,
+    default: () => [],
+  }),
+  sources: Annotation<string[]>({
+    reducer: (left, right) => [...new Set([...left, ...right])],
+    default: () => [],
+  }),
+});
+```
+
+## Parallel superstep and a join node
+
+A conditional edge that returns a *list* of node names runs those nodes in the same superstep. They must all use the same routing style afterward (static edges, not mixed with `Command.goto`). This graph fans out to `search_notes`, `calculator`, and/or `book_room`, then fans in at `join_tools`, which is the only node allowed to choose `agent` vs `END`.
+
+```ts
+function routeAfterAgent(state) {
+  const dest = [];
+  if (hasSearch) dest.push("search_notes");
+  if (hasCalc) dest.push("calculator");
+  if (hasBook) dest.push("book_room");
+  return dest.length === 1 ? dest[0] : dest;
+}
+graph
+  .addEdge("search_notes", "join_tools")
+  .addEdge("calculator", "join_tools")
+  .addEdge("book_room", "join_tools");
+```
+
+## Multiple HITL tools, one join
+
+`interrupt()` is not limited to one node. `calculator` and `book_room` share the same approval loop (`hitlToolNode`). Each HITL node only writes `rejected: true` on a denial — it omits the field when approved — so two HITL tools in the same superstep cannot clobber a rejection with `rejected: false`. `join_tools` still emits the hardcoded refusal and routes to `END`.
+
+```ts
+return rejected ? { messages: results, rejected: true } : { messages: results };
+```
+
+## MMR (Maximal Marginal Relevance)
+
+Vector search that trades a bit of raw similarity for diversity: the next chunk should be relevant to the query *and* unlike chunks already picked. `MemoryVectorStore.maxMarginalRelevanceSearch` takes `k`, `fetchK` (the larger pool it ranks from), and `lambda` (1 = pure similarity, 0 = pure diversity).
+
+```ts
+const mmrHits = await store.maxMarginalRelevanceSearch(query, {
+  k: 8,
+  fetchK: 16,
+  lambda: 0.5,
+});
+```
+
+## Hybrid search and Reciprocal Rank Fusion
+
+Embeddings catch paraphrases; BM25 catches exact tokens (a product name, a dollar amount). Reciprocal Rank Fusion merges the two ranked lists without requiring comparable scores: each position `i` adds `1 / (60 + i + 1)`. Chunks that appear in both lists rise.
+
+```ts
+const fused = fuseRrf([vectorHits, keywordHits], 8);
+```
+
+## LLM re-ranking
+
+After cheap retrieval has a candidate set, a cross-attention pass (here: the same Groq chat model + `withStructuredOutput`) reorders those chunks against the question and keeps the top few. It is slower and costs tokens, so it runs on 8 candidates, not the whole corpus.
+
+```ts
+const result = await reranker.invoke(`Rank these chunks...\nQuestion: ${query}\n${listed}`);
+const top = result.orderedIndices.map((i) => docs[i]).slice(0, 4);
+```

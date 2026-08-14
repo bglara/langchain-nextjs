@@ -1,0 +1,9 @@
+Nimbus Code of Conduct
+
+Harassment, discrimination, and retaliation are prohibited. Reports go to People Ops or the anonymous hotline 1-800-NIM-ETHIC. Retaliation for a good-faith report is itself a fireable offense.
+
+Customer drone footage and warehouse layouts are confidential. Do not post Atlas or Magpie internals on public GitHub or social media.
+
+Gifts from vendors over $50 must be registered in the gifts log. Cash gifts of any amount are forbidden.
+
+Romantic relationships in a direct reporting line must be disclosed to People Ops within 7 days.

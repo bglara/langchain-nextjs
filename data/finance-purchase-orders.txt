@@ -1,0 +1,11 @@
+Purchase Order Authority
+
+Under $500: hiring manager can approve in the PO tool (Coupa).
+
+$500–$5,000: department director.
+
+Above $5,000: VP of the function, plus Finance controller.
+
+Split POs to dodge a threshold are a code-of-conduct violation. Software subscriptions over 12 months count at full TCV, not monthly.
+
+Atlas demo units for sales come from SKU ATLAS-X7-HW with reason code DEMO; they still need a PO.

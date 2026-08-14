@@ -1,0 +1,9 @@
+Payroll Calendar
+
+Nimbus pays twice a month: the 15th and the last business day of the month, via ADP. If the 15th is a weekend, pay on the prior Friday.
+
+On-call stipends and referral bonuses hit the payroll after they are approved, not the same cycle.
+
+Direct deposit changes need 8 business days in ADP. Paper checks are not issued except for final pay in states that require it.
+
+Questions: payroll@nimbus.example — not the #help-it channel.

@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 
-type Message = { role: "user" | "assistant"; content: string };
+type TraceInfo = { runId: string; url: string; score?: 0 | 1 };
+type Message = { role: "user" | "assistant"; content: string; trace?: TraceInfo };
 type Tab = "chat" | "summarize" | "ask-docs" | "agent";
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -11,27 +12,102 @@ const TAB_LABELS: Record<Tab, string> = {
   agent: "Agent",
 };
 
+function readTraceHeaders(res: Response): TraceInfo | null {
+  const runId = res.headers.get("x-langsmith-run-id");
+  const url = res.headers.get("x-langsmith-trace-url");
+  if (!runId || !url) return null;
+  return { runId, url };
+}
+
+async function sendFeedback(runId: string, score: 0 | 1) {
+  await fetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId, score }),
+  });
+}
+
+function TracePanel({
+  trace,
+  showOffHint,
+  onScored,
+}: {
+  trace: TraceInfo | null;
+  showOffHint: boolean;
+  onScored: (next: TraceInfo) => void;
+}) {
+  if (!trace) {
+    if (!showOffHint) return null;
+    return (
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        Tracing off — set LANGSMITH_* in .env.local
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+      <a
+        href={trace.url}
+        target="_blank"
+        rel="noreferrer"
+        className="underline underline-offset-2"
+      >
+        Open trace
+      </a>
+      <button
+        type="button"
+        disabled={trace.score !== undefined}
+        onClick={async () => {
+          await sendFeedback(trace.runId, 1);
+          onScored({ ...trace, score: 1 });
+        }}
+        className="disabled:opacity-40"
+        aria-label="Thumbs up"
+      >
+        {trace.score === 1 ? "👍" : "👍"}
+      </button>
+      <button
+        type="button"
+        disabled={trace.score !== undefined}
+        onClick={async () => {
+          await sendFeedback(trace.runId, 0);
+          onScored({ ...trace, score: 0 });
+        }}
+        className="disabled:opacity-40"
+        aria-label="Thumbs down"
+      >
+        👎
+      </button>
+      {trace.score !== undefined && (
+        <span>{trace.score === 1 ? "rated up" : "rated down"}</span>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("chat");
 
-  // chat state
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [chatTracingOff, setChatTracingOff] = useState(false);
 
-  // summarize state
   const [summary, setSummary] = useState<{
     title: string;
     keyPoints: string[];
     actionItems: string[];
   } | null>(null);
   const [summarizing, setSummarizing] = useState(false);
+  const [summaryTrace, setSummaryTrace] = useState<TraceInfo | null>(null);
+  const [summaryTracingOff, setSummaryTracingOff] = useState(false);
 
-  // ask-docs (RAG) state
   const [question, setQuestion] = useState("");
   const [docsAnswer, setDocsAnswer] = useState<{ answer: string; sources: string[] } | null>(null);
   const [asking, setAsking] = useState(false);
+  const [docsTrace, setDocsTrace] = useState<TraceInfo | null>(null);
+  const [docsTracingOff, setDocsTracingOff] = useState(false);
 
-  // agent (LangGraph) state
   const [agentMessages, setAgentMessages] = useState<Message[]>([]);
   const [agentInput, setAgentInput] = useState("");
   const [agentThinking, setAgentThinking] = useState(false);
@@ -41,9 +117,14 @@ export default function Home() {
     args: unknown;
   } | null>(null);
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
+  const [agentSources, setAgentSources] = useState<string[]>([]);
+  const [agentTrace, setAgentTrace] = useState<TraceInfo | null>(null);
+  const [agentTracingOff, setAgentTracingOff] = useState(false);
 
-  // Generated client-side (not during SSR) to avoid a hydration mismatch.
+  // Client-only UUID: a useState initializer would differ between SSR and the
+  // browser and fail hydration. The set-state-in-effect lint is accepted here.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration-safe thread id
     setThreadId(crypto.randomUUID());
   }, []);
 
@@ -52,6 +133,14 @@ export default function Home() {
     setAgentMessages([]);
     setPendingApproval(null);
     setAgentStatus(null);
+    setAgentSources([]);
+    setAgentTrace(null);
+  }
+
+  function noteTrace(res: Response, setOff: (off: boolean) => void): TraceInfo | null {
+    const trace = readTraceHeaders(res);
+    if (!trace) setOff(true);
+    return trace;
   }
 
   async function sendMessage(e: React.FormEvent) {
@@ -60,8 +149,6 @@ export default function Home() {
     const nextMessages: Message[] = [...messages, { role: "user", content: input }];
     setMessages(nextMessages);
     setInput("");
-
-    // add an empty assistant message we'll fill in as chunks arrive
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     const res = await fetch("/api/chat", {
@@ -69,6 +156,16 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: nextMessages }),
     });
+
+    const trace = noteTrace(res, setChatTracingOff);
+    if (trace) {
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last?.role === "assistant") updated[updated.length - 1] = { ...last, trace };
+        return updated;
+      });
+    }
 
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
@@ -98,6 +195,7 @@ export default function Home() {
     });
     const data = await res.json();
     setSummary(data);
+    setSummaryTrace(noteTrace(res, setSummaryTracingOff));
     setSummarizing(false);
   }
 
@@ -113,15 +211,27 @@ export default function Home() {
     });
     const data = await res.json();
     setDocsAnswer(data);
+    setDocsTrace(noteTrace(res, setDocsTracingOff));
     setAsking(false);
   }
 
-  // Each NDJSON line from /api/agent is one LangGraph "updates" event:
-  //   { agent: { messages: [AIMessage-like] } }   — the model ran
-  //   { tools: { messages: [ToolMessage-like] } } — a tool finished
-  //   { __interrupt__: [{ value: { action, args } }] } — paused for approval
-  // Messages are LangChain's serialized form, so the actual text/tool_calls
-  // live under `.kwargs`, same shape you'd see calling these routes with curl.
+  // Each NDJSON line from /api/agent is one LangGraph "updates" event.
+  // Node names: agent | search_notes | calculator | book_room | join_tools
+  // plus { __interrupt__: [...] } when the graph pauses for approval.
+  // A rejection never goes back to "agent" — join_tools emits the fixed
+  // AIMessage and routes to END — so the UI must read that node too.
+  function serializedAssistantText(msg: unknown): string | null {
+    const m = msg as {
+      kwargs?: { content?: unknown; tool_calls?: unknown[] };
+      content?: unknown;
+      tool_calls?: unknown[];
+    };
+    const body = m.kwargs ?? m;
+    const toolCalls = body.tool_calls ?? [];
+    if (Array.isArray(toolCalls) && toolCalls.length > 0) return null;
+    return typeof body.content === "string" && body.content ? body.content : null;
+  }
+
   function handleAgentEvent(event: Record<string, unknown>) {
     if (event.__interrupt__) {
       const interrupts = event.__interrupt__ as { value: { action: string; args: unknown } }[];
@@ -130,45 +240,95 @@ export default function Home() {
       return;
     }
 
-    if (event.agent) {
-      const aiMessage = (event.agent as { messages: { kwargs: { content: string; tool_calls?: { name: string }[] } }[] })
-        .messages[0].kwargs;
-      const toolCalls = aiMessage.tool_calls ?? [];
+    if (event.search_notes) {
+      const update = event.search_notes as { sources?: string[] };
+      if (update.sources?.length) {
+        setAgentSources((prev) => [...new Set([...prev, ...update.sources!])]);
+      }
+      setAgentStatus("searching notes...");
+      return;
+    }
 
-      if (toolCalls.length > 0) {
-        // The model decided to call one or more tools — not the final answer yet.
-        setAgentStatus(`calling ${toolCalls.map((c) => c.name).join(", ")}...`);
-      } else {
-        setAgentMessages((prev) => [...prev, { role: "assistant", content: aiMessage.content }]);
+    if (event.calculator) {
+      setAgentStatus("calling calculator...");
+      return;
+    }
+
+    if (event.book_room) {
+      setAgentStatus("booking a room...");
+      return;
+    }
+
+    if (event.join_tools) {
+      const update = event.join_tools as { messages?: unknown[] };
+      const text = (update.messages ?? [])
+        .map(serializedAssistantText)
+        .find((t) => t);
+      if (text) {
+        setAgentMessages((prev) => [...prev, { role: "assistant", content: text }]);
         setAgentStatus(null);
+      } else {
+        setAgentStatus("combining tool results...");
       }
       return;
     }
 
-    if (event.tools) {
-      setAgentStatus("processing tool result...");
+    if (event.agent) {
+      const messages = (event.agent as { messages?: unknown[] }).messages ?? [];
+      const last = messages[messages.length - 1];
+      const text = serializedAssistantText(last);
+      if (text) {
+        setAgentMessages((prev) => [...prev, { role: "assistant", content: text }]);
+        setAgentStatus(null);
+      } else {
+        const kwargs = (last as { kwargs?: { tool_calls?: { name: string }[] } })?.kwargs;
+        const names = (kwargs?.tool_calls ?? []).map((c) => c.name);
+        if (names.length > 0) setAgentStatus(`calling ${names.join(", ")}...`);
+      }
+      return;
     }
   }
 
   async function consumeAgentStream(res: Response) {
+    const trace = noteTrace(res, setAgentTracingOff);
+    if (trace) setAgentTrace(trace);
+
+    if (!res.ok) {
+      setAgentStatus(null);
+      setAgentThinking(false);
+      setAgentMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Request failed (${res.status}). Check the server log.` },
+      ]);
+      return;
+    }
+
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop()!; // last entry may be a partial line — keep it for next read
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop()!;
 
-      for (const line of lines) {
-        if (line.trim()) handleAgentEvent(JSON.parse(line));
+        for (const line of lines) {
+          if (line.trim()) handleAgentEvent(JSON.parse(line));
+        }
       }
+    } catch {
+      setAgentMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "The stream dropped. Check the server log." },
+      ]);
+    } finally {
+      setAgentThinking(false);
+      setAgentStatus(null);
     }
-
-    setAgentThinking(false);
   }
 
   async function sendToAgent(e: React.FormEvent) {
@@ -180,7 +340,6 @@ export default function Home() {
     setAgentThinking(true);
     setAgentStatus("thinking...");
 
-    // Send ONLY the new message — history lives in the server's checkpointer.
     const res = await fetch("/api/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -227,15 +386,35 @@ export default function Home() {
               {messages.map((m, i) => (
                 <div
                   key={i}
-                  className={`max-w-[80%] rounded-2xl px-4 py-2 whitespace-pre-wrap ${
-                    m.role === "user"
-                      ? "self-end bg-black text-white dark:bg-white dark:text-black"
-                      : "self-start bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white"
+                  className={`flex max-w-[80%] flex-col gap-1 ${
+                    m.role === "user" ? "self-end items-end" : "self-start items-start"
                   }`}
                 >
-                  {m.content}
+                  <div
+                    className={`rounded-2xl px-4 py-2 whitespace-pre-wrap ${
+                      m.role === "user"
+                        ? "bg-black text-white dark:bg-white dark:text-black"
+                        : "bg-zinc-200 text-black dark:bg-zinc-800 dark:text-white"
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+                  {m.role === "assistant" && m.trace && (
+                    <TracePanel
+                      trace={m.trace}
+                      showOffHint={false}
+                      onScored={(next) =>
+                        setMessages((prev) =>
+                          prev.map((msg, idx) => (idx === i ? { ...msg, trace: next } : msg)),
+                        )
+                      }
+                    />
+                  )}
                 </div>
               ))}
+              {chatTracingOff && messages.length > 0 && (
+                <TracePanel trace={null} showOffHint onScored={() => {}} />
+              )}
             </div>
 
             <form onSubmit={sendMessage} className="flex gap-2 pt-2">
@@ -292,6 +471,13 @@ export default function Home() {
                     </ul>
                   </>
                 )}
+                <div className="mt-3">
+                  <TracePanel
+                    trace={summaryTrace}
+                    showOffHint={summaryTracingOff}
+                    onScored={setSummaryTrace}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -323,6 +509,13 @@ export default function Home() {
                     Sources: {docsAnswer.sources.join(", ")}
                   </p>
                 )}
+                <div className="mt-3">
+                  <TracePanel
+                    trace={docsTrace}
+                    showOffHint={docsTracingOff}
+                    onScored={setDocsTrace}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -342,6 +535,20 @@ export default function Home() {
                 New thread
               </button>
             </div>
+
+            {agentSources.length > 0 && (
+              <p className="pb-2 text-xs text-zinc-500 dark:text-zinc-400">
+                Sources:{" "}
+                {agentSources.map((s) => (
+                  <span
+                    key={s}
+                    className="mr-1 inline-block rounded-full border border-zinc-300 dark:border-zinc-700 px-2 py-0.5"
+                  >
+                    {s}
+                  </span>
+                ))}
+              </p>
+            )}
 
             <div className="flex flex-1 flex-col gap-3 overflow-y-auto pb-4">
               {agentMessages.length === 0 && (
@@ -397,6 +604,14 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
+              )}
+
+              {(agentTrace || agentTracingOff) && (
+                <TracePanel
+                  trace={agentTrace}
+                  showOffHint={agentTracingOff}
+                  onScored={setAgentTrace}
+                />
               )}
             </div>
 

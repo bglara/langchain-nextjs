@@ -1,0 +1,9 @@
+Magpie Picker Pricing Sheet (internal)
+
+List price: $18,000 per Magpie Picker robot. Software map license: $220 per robot per month, billed annually.
+
+Aisle mapping service (professional install): $2,400 per site, waived on orders of 8+ robots.
+
+No volume hardware discount below 5 units. 5–12 units: 8% off hardware only. Software stays $220.
+
+SKU MAGPIE-AMR-1. Cloud Sync for Magpie is included in the $220 software line — do not double-bill the $14 Atlas Cloud Sync SKU.

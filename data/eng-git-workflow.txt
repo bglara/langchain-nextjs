@@ -1,0 +1,9 @@
+Git Workflow
+
+Trunk-based development on main. Feature branches, squash merge, one approving review required. Direct pushes to main are blocked.
+
+CI must be green: unit, lint, and the Atlas sim smoke (except docs-only diffs labeled skip-sim).
+
+Secrets never in git. Use Infisical. A leaked Groq or LangSmith key is a SEV2 and rotates within the hour.
+
+Release tags: atlas-firmware-x.y.z and magpie-x.y.z. Do not reuse a tag.

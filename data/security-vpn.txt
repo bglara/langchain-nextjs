@@ -1,0 +1,9 @@
+Corporate VPN (WireGuard)
+
+Nimbus uses WireGuard. Config is pushed by Jamf; do not download random .conf files.
+
+Split tunnel: only 10.0.0.0/8 and staging.nimbus.internal go through the VPN. General web traffic does not.
+
+Personal devices cannot join Nimbus-Corp or the VPN. Guest WiFi is the only option for phones without MDM.
+
+A lost laptop: lock in Jamf, then treat as a security incident if the disk was unlocked. Report in #sec-incidents.

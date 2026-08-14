@@ -1,0 +1,9 @@
+Engineering On-Call
+
+Primary + secondary rotation, weekly, Monday 10:00 Pacific handoff. Primary stipend: $150 per week, paid on the following payroll.
+
+Paging: PagerDuty service "atlas-prod". Magpie production pages "magpie-prod" (a different rotation).
+
+Primary must be able to reach a laptop within 15 minutes. Remote-primary is allowed; fully-offline hiking weeks must swap.
+
+If you acknowledge a page and have not updated the incident channel in 20 minutes, secondary is auto-paged.

@@ -1,26 +1,28 @@
 import { chatChain } from "@/lib/chains/chat";
+import { langSmithHeaders, startApiTrace } from "@/lib/tracing";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
-
-  const stream = await chatChain.stream({ messages });
+  const trace = await startApiTrace("POST /api/chat");
   const encoder = new TextEncoder();
 
   const readable = new ReadableStream({
     async start(controller) {
       try {
-        for await (const chunk of stream) {
-          controller.enqueue(encoder.encode(chunk)); // chunk is already a string now
-        }
+        await trace.run(async () => {
+          const stream = await chatChain.stream({ messages });
+          for await (const chunk of stream) {
+            controller.enqueue(encoder.encode(chunk));
+          }
+        });
         controller.close();
+        await trace.end();
       } catch (error) {
-        // Without this, an error mid-stream (rate limit, network blip) leaves
-        // the client's reader hanging forever instead of rejecting. controller.error()
-        // propagates the failure to whoever is reading the response body.
+        await trace.end(error);
         controller.error(error);
       }
     },
   });
 
-  return new Response(readable);
+  return new Response(readable, { headers: await langSmithHeaders(trace.runId) });
 }

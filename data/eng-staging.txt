@@ -1,0 +1,9 @@
+Staging Environment
+
+URL: https://staging.nimbus.internal (VPN required). Staging DB is reset every Sunday at 02:00 Pacific. Do not store customer PII there.
+
+Atlas firmware staging bay is Dock-A. Magpie staging aisle is the painted yellow loop in the basement.
+
+Cloud Sync staging project is "nimbus-staging" — never point a customer drone at it.
+
+Feature flags for staging use LaunchDarkly project nimbus-stage. Production flags are a different project; copying keys across is forbidden.

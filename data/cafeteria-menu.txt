@@ -1,0 +1,9 @@
+Nimbus Robotics Cafeteria Menu (week of sample data)
+
+Monday: lentil soup, grilled cheese, green salad.
+Tuesday: taco bar. The kitchen restocks snacks on Tuesday morning (see the office guide).
+Wednesday: roast chicken, rice, roasted vegetables.
+Thursday: pasta bar.
+Friday: leftover buffet and pizza.
+
+None of this is HR policy, product pricing, or office access. It exists so retrieval has an obviously-irrelevant document to ignore.

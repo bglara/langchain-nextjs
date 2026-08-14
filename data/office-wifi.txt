@@ -1,0 +1,9 @@
+Network Names
+
+Guest: SSID Nimbus-Guest, password drone-flight-42. Captive portal, 12-hour sessions, no internal IPs.
+
+Corporate: SSID Nimbus-Corp. Join only via MDM-enrolled laptops (Jamf). Personal phones on Nimbus-Corp are blocked.
+
+Lab subnet 10.42.0.0/16 is Atlas/Magpie only. Putting a laptop on the lab switch without a Facilities ticket can knock drones offline.
+
+VPN is WireGuard (see security-vpn.txt). Guest WiFi is not a substitute for VPN.

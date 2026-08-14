@@ -1,0 +1,9 @@
+Incident Severity
+
+SEV1: customer-facing outage or safety stop on a live warehouse floor. Ack in 15 minutes, incident commander named, status page updated.
+
+SEV2: major degradation (Cloud Sync delay > 10 minutes, Magpie throughput < 50%). Ack in 1 hour.
+
+SEV3: minor, workaround exists. Next business day.
+
+SEV1 always uses a dedicated Slack channel #inc-YYYYMMDD-shortname. Blameless retro within 5 business days, written in Notion under Incidents.
