@@ -211,15 +211,14 @@ await tree.patchRun();
 
 ## Run id in the UI / feedback
 
-The browser never sees `LANGSMITH_API_KEY`. It only receives `x-langsmith-run-id` (and a trace URL) on the response, then posts `{ runId, score }` to `/api/feedback`, which calls `client.createFeedback` on the server.
+The browser never sees `LANGSMITH_API_KEY`. It only receives `x-langsmith-run-id` (and a trace URL) on the response, then posts `{ runId, score }` to `/api/feedback`, which calls `client.createFeedback` on the server. `sessionId` here is the LangSmith **project** UUID (not the agent thread id). The UI URL is `/o/{org}/projects/p/{project}/r/{run}` — not `/runs/{id}`.
 
 ```ts
-return new Response(body, {
-  headers: {
-    "x-langsmith-run-id": runId,
-    "x-langsmith-trace-url": `${host}/runs/${runId}`,
-    "Access-Control-Expose-Headers": "x-langsmith-run-id, x-langsmith-trace-url",
-  },
+await client.createFeedback({
+  runId,
+  sessionId: await langSmithProjectId(),
+  key: "user-score",
+  score,
 });
 ```
 
@@ -236,6 +235,10 @@ const AgentState = Annotation.Root({
   sources: Annotation<string[]>({
     reducer: (left, right) => [...new Set([...left, ...right])],
     default: () => [],
+  }),
+  rejected: Annotation<boolean>({
+    reducer: (_left, right) => right,
+    default: () => false,
   }),
 });
 ```
@@ -288,9 +291,11 @@ const fused = fuseRrf([vectorHits, keywordHits], 8);
 
 ## LLM re-ranking
 
-After cheap retrieval has a candidate set, a cross-attention pass (here: the same Groq chat model + `withStructuredOutput`) reorders those chunks against the question and keeps the top few. It is slower and costs tokens, so it runs on 8 candidates, not the whole corpus.
+After cheap retrieval has a candidate set, a cross-attention pass (here: the same Groq chat model + `withStructuredOutput`) reorders those chunks against the question and keeps the top few. It is slower and costs tokens, so it runs on 8 candidates, not the whole corpus. Groq sometimes returns concatenated digits (`"0213"` instead of `[0, 2, 1, 3]`); `normalizeIndices` splits those, and a `try/catch` falls back to the RRF order so a bad rerank payload cannot 500 the agent.
 
 ```ts
 const result = await reranker.invoke(`Rank these chunks...\nQuestion: ${query}\n${listed}`);
-const top = result.orderedIndices.map((i) => docs[i]).slice(0, 4);
+const top = normalizeIndices(result.orderedIndices, docs.length)
+  .map((i) => docs[i])
+  .slice(0, 4);
 ```

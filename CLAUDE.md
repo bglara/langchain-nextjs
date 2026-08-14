@@ -24,7 +24,7 @@ For learning content (chain/graph logic), write the code directly yourself, with
 
 ## Documentation upkeep
 
-Keep two docs in sync with the actual state of the project as it evolves:
+Keep these docs in sync with the actual state of the project as it evolves:
 
 - **`README.md`** — the human-facing entry point. It must always contain:
   1. Project title and a one-line description.
@@ -35,6 +35,7 @@ Keep two docs in sync with the actual state of the project as it evolves:
   6. Project structure: brief pointers into the codebase, deferring to `CLAUDE.md` for deep architecture rather than duplicating it.
   7. Related resources (e.g. the sibling Python project).
 - **`CONCEPTS.md`** — a running log of every LangChain/LangGraph/RAG concept covered in this project, in the order learned. Each entry has exactly three parts: the concept name, a short explanation, and a brief code example (pulled from or representative of this codebase). Add a new entry whenever a new concept is introduced; don't let it drift out of date.
+- **`AGENTS.md`** — Cursor working mode and learning sequence only; architecture stays in this file.
 
 ## Commands
 

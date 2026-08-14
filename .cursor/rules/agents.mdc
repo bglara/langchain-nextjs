@@ -11,4 +11,4 @@ Read and follow `AGENTS.md` (working mode, learning sequence) and `CLAUDE.md` (a
 - Verify APIs from installed `.d.ts` or official docs, never from memory.
 - Keep `README.md` and `CONCEPTS.md` in sync when the project changes.
 - Do not "fix" the accepted limitations in `CLAUDE.md`.
-- Remaining sequence unless the user asks otherwise: LangSmith → custom state + parallelism → advanced RAG.
+- The remaining learning sequence has been implemented (LangSmith, custom state + parallelism, advanced RAG). Do not re-introduce those as new work unless the user asks to extend them.

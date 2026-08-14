@@ -4,7 +4,7 @@ A LangChain.js / LangGraph.js learning project built with Next.js and Groq.
 
 ## Overview
 
-This project ports LangChain and LangGraph concepts — originally studied in Python (see the sibling project `~/learning/langchain-langgraph`) — into a TypeScript/Next.js app. It grew from a single chat endpoint into a small suite of features that each demonstrate a different piece of the LangChain.js / LangGraph.js API surface, from basic LLM calls all the way to a tool-calling agent with human-in-the-loop approval and persistent memory.
+This project ports LangChain and LangGraph concepts — originally studied in Python (see the sibling project `~/learning/langchain-langgraph`) — into a TypeScript/Next.js app. It grew from a single chat endpoint into a small suite of features that each demonstrate a different piece of the LangChain.js / LangGraph.js API surface: LCEL chains, hybrid RAG over a Nimbus Robotics corpus, a LangGraph agent with parallel tools and human-in-the-loop approval, and optional LangSmith tracing.
 
 ## Features
 
